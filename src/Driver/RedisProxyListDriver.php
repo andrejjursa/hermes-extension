@@ -14,6 +14,7 @@ use Efabrica\HermesExtension\Driver\Traits\ProcessSignalTrait;
 use Efabrica\HermesExtension\Driver\Traits\QueueAwareTrait;
 use Efabrica\HermesExtension\Heartbeat\HeartbeatBehavior;
 use Efabrica\HermesExtension\Heartbeat\HermesProcess;
+use Efabrica\HermesExtension\Metrics\PrometheusMetric;
 use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
 use Tomaj\Hermes\Dispatcher;
@@ -47,6 +48,8 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
 
     private bool $useTopPriorityFallback = false;
 
+    protected ?PrometheusMetric $prometheusMetric = null;
+
     public function __construct(RedisProxy $redis, string $key, float $refreshInterval = 1)
     {
         $this->setupPriorityQueue($key, Dispatcher::DEFAULT_PRIORITY);
@@ -59,6 +62,11 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
     public function setUseTopPriorityFallback(bool $useTopPriorityFallback): void
     {
         $this->useTopPriorityFallback = $useTopPriorityFallback;
+    }
+
+    public function setPrometheusMetric(PrometheusMetric $prometheusMetric): void
+    {
+        $this->prometheusMetric = $prometheusMetric;
     }
 
     /**
@@ -131,7 +139,13 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
                         $message = $this->serializer->unserialize($messageString);
                         $this->doForkProcess(
                             function () use ($callback, $message, $foundPriority) {
-                                $this->monitorMessageCallback($callback, $message, $foundPriority);
+                                $result = $this->monitorMessageCallback($callback, $message, $foundPriority);
+                                if ($this->prometheusMetric) {
+                                    $this->prometheusMetric->incrementMessageCount(
+                                        $message->getType(),
+                                        $result
+                                    );
+                                }
                             }
                         );
                         $this->incrementProcessedItems();

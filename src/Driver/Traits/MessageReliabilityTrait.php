@@ -51,30 +51,32 @@ trait MessageReliabilityTrait
      * Calls the message processing callback in monitored mode if the reliable messaging is enabled,
      * will fall back to the non-monitored mode otherwise.
      */
-    private function monitorMessageCallback(Closure $callback, MessageInterface $message, int $foundPriority): void
+    private function monitorMessageCallback(Closure $callback, MessageInterface $message, int $foundPriority): bool
     {
         $accessor = HermesDriverAccessor::getInstance();
 
         $accessor->setMessage($message, $foundPriority);
         $accessor->setProcessingStatus();
+        $result = false;
         try {
             $this->updateMessageStatus($message, $foundPriority);
             if ($this->monitorHashRedisKey !== null) {
                 $processMessage = function () use ($callback, $message, $foundPriority) {
-                    $callback($message, $foundPriority);
+                    return $callback($message, $foundPriority);
                 };
                 $notify = function () use ($message, $foundPriority) {
                     $this->updateMessageStatus($message, $foundPriority);
                 };
-                $this->commonMainProcess($processMessage, $notify, $processMessage);
+                $result = $this->commonMainProcess($processMessage, $notify, $processMessage);
             } else {
-                $callback($message, $foundPriority);
+                $result = $callback($message, $foundPriority);
             }
             $this->updateMessageStatus();
         } finally {
             $accessor->setProcessingStatus();
             $accessor->clear();
         }
+        return $result;
     }
 
     /**

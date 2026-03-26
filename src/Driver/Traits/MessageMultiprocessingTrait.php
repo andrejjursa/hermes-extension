@@ -12,8 +12,9 @@ trait MessageMultiprocessingTrait
 {
     private RedisProxy $redis;
 
-    private function commonMainProcess(Closure $mainProcess, Closure $childProcess, Closure $noForkProcess): void
+    private function commonMainProcess(Closure $mainProcess, Closure $childProcess, Closure $noForkProcess): bool
     {
+        $result = false;
         if (extension_loaded('pcntl') && extension_loaded('posix')) {
             $flagFile = sys_get_temp_dir() . '/hermes_monitor_' . uniqid() . '-' . $this->myIdentifier . '.flag';
             @unlink($flagFile);
@@ -21,25 +22,28 @@ trait MessageMultiprocessingTrait
             $pid = pcntl_fork();
 
             if ($pid == -1) {
-                $noForkProcess();
+                $result = $noForkProcess();
             } elseif ($pid) {
-                $this->commonForkMainProcess($mainProcess, $pid, $flagFile);
+                $result = $this->commonForkMainProcess($mainProcess, $pid, $flagFile);
             } else {
                 $this->commonForkChildProcess($childProcess, $flagFile);
             }
         } else {
-            $noForkProcess();
+            $result = $noForkProcess();
         }
+        return $result;
     }
 
     /**
      * @internal Do not use this method outside trait!
      */
-    private function commonForkMainProcess(Closure $mainProcess, int $pid, string $flagFile): void
+    private function commonForkMainProcess(Closure $mainProcess, int $pid, string $flagFile): bool
     {
         try {
             $this->redis->resetConnectionPool();
-            $mainProcess();
+            return $mainProcess();
+        } catch (\Throwable $exception) {
+            return false;
         } finally {
             file_put_contents($flagFile, 'DONE');
 
