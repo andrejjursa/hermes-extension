@@ -13,6 +13,7 @@ use Prometheus\Histogram;
 final class PrometheusMetrics
 {
     protected CollectorRegistry $registry;
+
     protected string $namespace;
 
     protected int $timeStart = 0;

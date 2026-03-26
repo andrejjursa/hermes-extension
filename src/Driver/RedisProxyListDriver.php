@@ -17,6 +17,7 @@ use Efabrica\HermesExtension\Heartbeat\HermesProcess;
 use Efabrica\HermesExtension\Metrics\PrometheusMetrics;
 use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
+use Throwable;
 use Tomaj\Hermes\Dispatcher;
 use Tomaj\Hermes\Driver\DriverInterface;
 use Tomaj\Hermes\Driver\MaxItemsTrait;
@@ -143,13 +144,19 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
                         $accessor->setMessage($message, $foundPriority);
                         $this->doForkProcess(
                             function () use ($callback, $message, $foundPriority) {
-                                $result = $this->monitorMessageCallback($callback, $message, $foundPriority);
-                                if ($this->prometheusMetrics) {
-                                    $this->prometheusMetrics->incrementMessageCounter(
-                                        $message->getType(),
-                                        $result
-                                    );
-                                    $this->prometheusMetrics->finishProcessingMessage($message->getType());
+                                try {
+                                    $result = $this->monitorMessageCallback($callback, $message, $foundPriority);
+                                } catch (Throwable $exception) {
+                                    $result = false;
+                                    throw $exception;
+                                } finally {
+                                    if ($this->prometheusMetrics) {
+                                        $this->prometheusMetrics->incrementMessageCounter(
+                                            $message->getType(),
+                                            $result
+                                        );
+                                        $this->prometheusMetrics->finishProcessingMessage($message->getType());
+                                    }
                                 }
                             }
                         );

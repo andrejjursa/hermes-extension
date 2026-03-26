@@ -11,7 +11,6 @@ use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
 use RuntimeException;
 use Throwable;
-use Tomaj\Hermes\Driver\DriverInterface;
 use Tomaj\Hermes\Driver\SerializerAwareTrait;
 use Tracy\Debugger;
 

@@ -6,6 +6,7 @@ use Closure;
 use Efabrica\HermesExtension\Driver\HermesDriverAccessor;
 use LogicException;
 use RedisProxy\RedisProxy;
+use Throwable;
 use Tomaj\Hermes\Driver\DriverInterface;
 
 trait MessageMultiprocessingTrait
@@ -42,7 +43,7 @@ trait MessageMultiprocessingTrait
         try {
             $this->redis->resetConnectionPool();
             return $mainProcess();
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             return false;
         } finally {
             file_put_contents($flagFile, 'DONE');
