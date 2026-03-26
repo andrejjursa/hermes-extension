@@ -126,7 +126,8 @@ final class PrometheusMetrics
             $this->namespace,
             'hermes_event_duration_seconds',
             'Event processing duration in seconds',
-            ['event_type']
+            ['event_type'],
+            [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5]
         );
     }
 }
