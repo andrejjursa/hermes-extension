@@ -8,11 +8,14 @@ use Prometheus\CollectorRegistry;
 use Prometheus\Counter;
 use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
+use Prometheus\Histogram;
 
 final class PrometheusMetrics
 {
     protected CollectorRegistry $registry;
     protected string $namespace;
+
+    protected int $timeStart = 0;
 
     public function __construct(
         CollectorRegistry $registry,
@@ -35,6 +38,7 @@ final class PrometheusMetrics
 
     public function startProcessingMessage(string $messageType): void
     {
+        $this->timeStart = hrtime(true);
         try {
             $gauge = $this->getEventsInProgressGauge();
         } catch (MetricsRegistrationException $exception) {
@@ -46,6 +50,9 @@ final class PrometheusMetrics
 
     public function finishProcessingMessage(string $messageType): void
     {
+        /** @var int $end */
+        $end = hrtime(true);
+        $seconds = ($end - $this->timeStart) / 1e9;
         try {
             $gauge = $this->getEventsInProgressGauge();
         } catch (MetricsRegistrationException $exception) {
@@ -53,6 +60,22 @@ final class PrometheusMetrics
         }
 
         $gauge->dec([$messageType]);
+
+        try {
+            $gauge = $this->getEventTimestampGauge();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $gauge->set(time(), [$messageType]);
+
+        try {
+            $histogram = $this->getEventDurationHistogram();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $histogram->observe($seconds, [$messageType]);
     }
 
     /**
@@ -77,6 +100,32 @@ final class PrometheusMetrics
             $this->namespace,
             'hermes_events_in_progress',
             'Currently processing events',
+            ['event_type']
+        );
+    }
+
+    /**
+     * @throws MetricsRegistrationException
+     */
+    private function getEventTimestampGauge(): Gauge
+    {
+        return $this->registry->getOrRegisterGauge(
+            $this->namespace,
+            'hermes_last_event_timestamp_seconds',
+            'Unix timestamp of last processed event',
+            ['event_type']
+        );
+    }
+
+    /**
+     * @throws MetricsRegistrationException
+     */
+    private function getEventDurationHistogram(): Histogram
+    {
+        return $this->registry->getOrRegisterHistogram(
+            $this->namespace,
+            'hermes_event_duration_seconds',
+            'Event processing duration in seconds',
             ['event_type']
         );
     }
