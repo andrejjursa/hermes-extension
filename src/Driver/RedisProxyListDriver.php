@@ -14,7 +14,7 @@ use Efabrica\HermesExtension\Driver\Traits\ProcessSignalTrait;
 use Efabrica\HermesExtension\Driver\Traits\QueueAwareTrait;
 use Efabrica\HermesExtension\Heartbeat\HeartbeatBehavior;
 use Efabrica\HermesExtension\Heartbeat\HermesProcess;
-use Efabrica\HermesExtension\Metrics\PrometheusMetric;
+use Efabrica\HermesExtension\Metrics\PrometheusMetrics;
 use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
 use Tomaj\Hermes\Dispatcher;
@@ -48,7 +48,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
 
     private bool $useTopPriorityFallback = false;
 
-    protected ?PrometheusMetric $prometheusMetric = null;
+    protected ?PrometheusMetrics $prometheusMetrics = null;
 
     public function __construct(RedisProxy $redis, string $key, float $refreshInterval = 1)
     {
@@ -64,9 +64,9 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         $this->useTopPriorityFallback = $useTopPriorityFallback;
     }
 
-    public function setPrometheusMetric(PrometheusMetric $prometheusMetric): void
+    public function setPrometheusMetrics(PrometheusMetrics $prometheusMetrics): void
     {
-        $this->prometheusMetric = $prometheusMetric;
+        $this->prometheusMetrics = $prometheusMetrics;
     }
 
     /**
@@ -137,14 +137,19 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
                         }
                         $this->ping(HermesProcess::STATUS_PROCESSING);
                         $message = $this->serializer->unserialize($messageString);
+                        if ($this->prometheusMetrics) {
+                            $this->prometheusMetrics->startProcessingMessage($message->getType());
+                        }
+                        $accessor->setMessage($message, $foundPriority);
                         $this->doForkProcess(
                             function () use ($callback, $message, $foundPriority) {
                                 $result = $this->monitorMessageCallback($callback, $message, $foundPriority);
-                                if ($this->prometheusMetric) {
-                                    $this->prometheusMetric->incrementMessageCount(
+                                if ($this->prometheusMetrics) {
+                                    $this->prometheusMetrics->incrementMessageCounter(
                                         $message->getType(),
                                         $result
                                     );
+                                    $this->prometheusMetrics->finishProcessingMessage($message->getType());
                                 }
                             }
                         );
