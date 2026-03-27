@@ -9,6 +9,7 @@ use Prometheus\Counter;
 use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
+use Prometheus\Summary;
 
 final class PrometheusMetrics
 {
@@ -77,6 +78,14 @@ final class PrometheusMetrics
         }
 
         $histogram->observe($seconds, [$messageType]);
+
+        try {
+            $summary = $this->getEventDurationSummary();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $summary->observe($seconds, [$messageType]);
     }
 
     /**
@@ -129,6 +138,19 @@ final class PrometheusMetrics
             'Event processing duration in seconds',
             ['event_type'],
             [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5]
+        );
+    }
+
+    /**
+     * @throws MetricsRegistrationException
+     */
+    private function getEventDurationSummary(): Summary
+    {
+        return $this->registry->getOrRegisterSummary(
+            $this->namespace,
+            'hermes_event_duration_seconds',
+            'Event processing duration in seconds',
+            ['event_type']
         );
     }
 }
