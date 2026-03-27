@@ -122,7 +122,7 @@ final class RedisProxyAdapter implements Adapter
         $this->redisProxy->rawCommand(
             'EVAL',
             <<<LUA
-local result = redis.call('hIncrByFloat, KEYS[1], ARGV[1], ARGV[3])
+local result = redis.call('hIncrByFloat', KEYS[1], ARGV[1], ARGV[3])
 redis.call('hIncrBy', KEYS[1], ARGV[2], 1)
 if tonumber(result) >= tonumber(ARGV[3]) then
     redis.call('hSet', KEYS[1], '__meta', ARGV[4])
