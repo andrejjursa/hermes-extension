@@ -205,7 +205,7 @@ LUA,
         $this->redisProxy->rawCommand(
             'EVAL',
             <<<LUA
-#!lua flags=allow-undeclared-keys
+--!df flags=allow-undeclared-keys
 redis.replicate_commands()
 local cursor = "0"
 repeat
