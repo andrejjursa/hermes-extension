@@ -137,14 +137,14 @@ final class RedisProxyAdapter implements ExpiringDataAdapter
             <<<LUA
 local result = redis.call('hIncrByFloat', KEYS[1], ARGV[1], ARGV[3])
 redis.call('hIncrBy', KEYS[1], ARGV[2], 1)
-if ARGV[5] != nil then
+if ARGV[5] ~= nil then
     redis.call('expire', KEYS[1], ARGV[5])
 end
 if tonumber(result) >= tonumber(ARGV[3]) then
     redis.call('hSet', KEYS[1], '__meta', ARGV[4])
     redis.call('sAdd', KEYS[2], KEYS[1])
-    if ARGV[5] != nil then
-        redis.call('aAdd', KEYS[3], KEYS[1])
+    if ARGV[5] ~= nil then
+        redis.call('sAdd', KEYS[3], KEYS[1])
     end
 end
 return result
