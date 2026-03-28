@@ -308,12 +308,12 @@ LUA,
     private function collectSummaries(): array
     {
         $math = new Math();
-        $summaryKeyIndexKey = self::$prefix . Summary::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':keys';
+        $summaryKey = self::$prefix . Summary::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX;
+        $keys = $this->redisProxy->keys($summaryKey . ':*:meta');
 
-        $keys = $this->redisProxy->smembers($summaryKeyIndexKey);
         $summaries = [];
         foreach ($keys as $metaKey) {
-            $rawSummary = $this->redisProxy->get($metaKey . ':meta');
+            $rawSummary = $this->redisProxy->get($metaKey);
             if ($rawSummary === null) {
                 continue;
             }
@@ -328,59 +328,66 @@ LUA,
                 'quantiles' => $metaData['quantiles'],
                 'samples' => [],
             ];
-            $values = $this->redisProxy->smembers($metaKey . ':value:keys');
-            $samples = [];
+
+            $values = $this->redisProxy->keys($summaryKey . ':' . $metaData['name'] . ':*:value');
             foreach ($values as $valueKey) {
-                $rawValue = explode(':', $valueKey);
-                if (count($rawValue) < 3) {
+                $rawValue = $this->redisProxy->get($valueKey);
+                if ($rawValue === null) {
                     continue;
                 }
-                $encodedLabelValues = $rawValue[2];
-                $decodedLabelValues = json_decode($encodedLabelValues);
+                $value = json_decode($rawValue, true);
+                $encodedLabelValues = $value;
+                $decodedLabelValues = $this->decodeLabelValues($encodedLabelValues);
 
-                $return = $this->redisProxy->get($valueKey);
-                if ($return !== null) {
-                    $samples[] = (float)$return;
-                }
-            }
-            if (count($samples) === 0) {
-                if (isset($valueKey)) {
-                    $this->redisProxy->del($valueKey);
+                $samples = [];
+                $sampleValues = $this->redisProxy->keys($summaryKey . ':' . $metaData['name'] . ':' . $encodedLabelValues . ':value:*');
+                foreach ($sampleValues as $sampleValueKey) {
+                    $samples[] = (float) $this->redisProxy->get($sampleValueKey);
                 }
 
-                continue;
-            }
+                if (count($samples) === 0) {
+                    try {
+                        $this->redisProxy->del($valueKey);
+                    } catch (RedisProxyException $e) {
+                        // Do nothing.
+                    }
 
-            if (!isset($decodedLabelValues)) {
-                continue;
-            }
+                    continue;
+                }
 
-            // Compute quantiles
-            sort($samples);
-            foreach ($data['quantiles'] as $quantile) {
+                sort($samples);
+                foreach ($data['quantiles'] as $quantile) {
+                    $data['samples'][] = [
+                        'name' => $metaData['name'],
+                        'labelNames' => ['quantile'],
+                        'labelValues' => array_merge($decodedLabelValues, [$quantile]),
+                        'value' => $math->quantile($samples, $quantile),
+                    ];
+                }
+
                 $data['samples'][] = [
-                    'name' => $metaData['name'],
-                    'labelNames' => ['quantile'],
-                    'labelValues' => array_merge($decodedLabelValues, [$quantile]),
-                    'value' => $math->quantile($samples, $quantile),
+                    'name' => $metaData['name'] . '_count',
+                    'labelNames' => [],
+                    'labelValues' => $decodedLabelValues,
+                    'value' => count($samples),
+                ];
+
+                $data['samples'][] = [
+                    'name' => $metaData['name'] . '_sum',
+                    'labelNames' => [],
+                    'labelValues' => $decodedLabelValues,
+                    'value' => array_sum($samples),
                 ];
             }
-
-            $data['samples'][] = [
-                'name' => $metaData['name'] . '_count',
-                'labelNames' => [],
-                'labelValues' => $decodedLabelValues,
-                'value' => count($samples),
-            ];
-
-            $data['samples'][] = [
-                'name' => $metaData['name'] . '_sum',
-                'labelNames' => [],
-                'labelValues' => $decodedLabelValues,
-                'value' => array_sum($samples),
-            ];
-
-            $summaries[] = $data;
+            if (count($data['samples']) > 0) {
+                $summaries[] = $data;
+            } else {
+                try {
+                    $this->redisProxy->del($metaKey);
+                } catch (RedisProxyException $e) {
+                    // Do nothing.
+                }
+            }
         }
         return $summaries;
     }
@@ -524,6 +531,25 @@ LUA,
             throw new RuntimeException(json_last_error_msg());
         }
         return base64_encode($json);
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException
+     */
+    protected function decodeLabelValues(string $values): array
+    {
+        $json = base64_decode($values, true);
+        if ($json === false) {
+            throw new RuntimeException('Cannot base64 decode label values');
+        }
+        $decodedValues = json_decode($json, true);
+        if ($decodedValues === false) {
+            throw new RuntimeException(json_last_error_msg());
+        }
+
+        return $decodedValues;
     }
 
     private function getRedisCommand(int $cmd): string
