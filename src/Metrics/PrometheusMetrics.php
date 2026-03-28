@@ -40,6 +40,11 @@ final class PrometheusMetrics
         }
     }
 
+    public function purgeData(): void
+    {
+        $this->registry->wipeStorage();
+    }
+
     public function incrementMessageCounter(string $messageType, bool $success = true): void
     {
         try {
