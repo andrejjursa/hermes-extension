@@ -19,7 +19,7 @@ use RuntimeException;
 use function count;
 use function json_encode;
 
-final class RedisProxyAdapter implements Adapter
+final class RedisProxyAdapter implements ExpiringDataAdapter
 {
     const PROMETHEUS_METRIC_KEYS_SUFFIX = '_METRIC_KEYS';
 
@@ -27,6 +27,8 @@ final class RedisProxyAdapter implements Adapter
      * @var string
      */
     private static $prefix = 'PROMETHEUS_';
+
+    private ?int $nextTTL = null;
 
     /**
      * @var RedisProxy
@@ -43,6 +45,20 @@ final class RedisProxyAdapter implements Adapter
         self::$prefix = $prefix;
     }
 
+    public function withTTL(int $ttl): ExpiringDataAdapter
+    {
+        $this->nextTTL = $ttl <= 0 ? null : $ttl;
+
+        return $this;
+    }
+
+    public function withoutTTL(): ExpiringDataAdapter
+    {
+        $this->nextTTL = null;
+
+        return $this;
+    }
+
     /**
      * @inheritDoc
      * @throws RedisProxyException
@@ -50,6 +66,7 @@ final class RedisProxyAdapter implements Adapter
      */
     public function collect(): array
     {
+        $this->nextTTL = null;
         $metrics = $this->collectHistograms();
         $metrics = array_merge($metrics, $this->collectGauges());
         $metrics = array_merge($metrics, $this->collectCounters());
@@ -96,6 +113,8 @@ final class RedisProxyAdapter implements Adapter
                 $data['maxAgeSeconds']
             );
         }
+
+        $this->nextTTL = null;
     }
 
     /**
@@ -118,20 +137,30 @@ final class RedisProxyAdapter implements Adapter
             <<<LUA
 local result = redis.call('hIncrByFloat', KEYS[1], ARGV[1], ARGV[3])
 redis.call('hIncrBy', KEYS[1], ARGV[2], 1)
+if ARGV[5] != nil then
+    redis.call('expire', KEYS[1], ARGV[5])
+end
 if tonumber(result) >= tonumber(ARGV[3]) then
     redis.call('hSet', KEYS[1], '__meta', ARGV[4])
     redis.call('sAdd', KEYS[2], KEYS[1])
+    if ARGV[5] != nil then
+        redis.call('aAdd', KEYS[3], KEYS[1])
+    end
 end
 return result
 LUA,
-            2,
+            3,
             $this->toMetricKey($data),
             self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX,
+            self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile',
             json_encode(['b' => 'sum', 'labelValues' => $data['labelValues']]),
             json_encode(['b' => $bucketToIncrease, 'labelValues' => $data['labelValues']]),
             $data['value'],
             json_encode($metaData),
+            $this->nextTTL,
         );
+
+        $this->nextTTL = null;
     }
 
     /**
@@ -166,6 +195,8 @@ LUA,
             $data['value'],
             json_encode($metaData),
         );
+
+        $this->nextTTL = null;
     }
 
     /**
@@ -193,6 +224,8 @@ LUA,
             json_encode($data['labelValues']),
             json_encode($metaData),
         );
+
+        $this->nextTTL = null;
     }
 
     /**
@@ -200,6 +233,8 @@ LUA,
      */
     public function wipeStorage(): void
     {
+        $this->nextTTL = null;
+
         $searchPattern = self::$prefix . '*';
 
         $this->redisProxy->rawCommand(
