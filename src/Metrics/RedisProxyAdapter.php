@@ -69,10 +69,6 @@ final class RedisProxyAdapter implements Adapter
     public function updateSummary(array $data): void
     {
         $summaryKey = self::$prefix . Summary::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX;
-        $summaryKeyIndexKey = self::$prefix . Summary::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':keys';
-        if (!$this->redisProxy->sismember($summaryKeyIndexKey, $summaryKey . ':' . $data['name'])) {
-            $this->redisProxy->sadd($summaryKeyIndexKey, $summaryKey . ':' . $data['name']);
-        }
 
         $metaKey = $summaryKey . ':' . $this->metaKey($data);
         $json = json_encode($this->metaData($data));
@@ -82,7 +78,6 @@ final class RedisProxyAdapter implements Adapter
         $this->redisProxy->setnx($metaKey, $json);
 
         $valueKey = $summaryKey . ':' . $this->valueKey($data);
-
         $json = json_encode($this->encodeLabelValues($data['labelValues']));
         if ($json === false) {
             throw new RuntimeException(json_last_error_msg());
@@ -94,13 +89,12 @@ final class RedisProxyAdapter implements Adapter
             $sampleKey = $valueKey . ':' . uniqid('', true);
             $done = $this->redisProxy->rawCommand(
                 'SET',
-                $summaryKey,
+                $sampleKey,
                 $data['value'],
                 'NX',
                 'EX',
                 $data['maxAgeSeconds']
             );
-            $this->redisProxy->sadd($summaryKey . ':' . $data['name'] . ':value:keys', $sampleKey);
         }
     }
 
