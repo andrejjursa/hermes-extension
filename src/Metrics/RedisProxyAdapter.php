@@ -138,13 +138,13 @@ final class RedisProxyAdapter implements ExpiringDataAdapter
 local result = redis.call('hIncrByFloat', KEYS[1], ARGV[1], ARGV[3])
 redis.call('hIncrBy', KEYS[1], ARGV[2], 1)
 local ttl = tonumber(ARGV[5])
-if ttl and ttl > 0 then
+if ttl > 0 then
     redis.call('expire', KEYS[1], ttl)
 end
 if tonumber(result) >= tonumber(ARGV[3]) then
     redis.call('hSet', KEYS[1], '__meta', ARGV[4])
     redis.call('sAdd', KEYS[2], KEYS[1])
-    if ttl and ttl > 0 then
+    if ttl > 0 then
         redis.call('sAdd', KEYS[3], KEYS[1])
     end
 end
@@ -158,7 +158,7 @@ LUA,
             json_encode(['b' => $bucketToIncrease, 'labelValues' => $data['labelValues']]),
             $data['value'],
             json_encode($metaData),
-            $this->nextTTL,
+            $this->nextTTL === null ? 0 : $this->nextTTL,
         );
 
         $this->nextTTL = null;
