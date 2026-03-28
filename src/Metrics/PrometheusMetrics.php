@@ -9,7 +9,9 @@ use Prometheus\Counter;
 use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
+use Prometheus\RenderTextFormat;
 use Prometheus\Summary;
+use Throwable;
 
 final class PrometheusMetrics
 {
@@ -25,6 +27,17 @@ final class PrometheusMetrics
     ) {
         $this->registry = $registry;
         $this->namespace = $namespace;
+    }
+
+    public function dataReport(): string
+    {
+        $samples = $this->registry->getMetricFamilySamples();
+        $rendered = new RenderTextFormat();
+        try {
+            return $rendered->render($samples, true);
+        } catch (Throwable $exception) {
+            return '';
+        }
     }
 
     public function incrementMessageCounter(string $messageType, bool $success = true): void
