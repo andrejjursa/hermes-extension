@@ -135,6 +135,19 @@ final class PrometheusMetrics
         }
 
         $testGaute->inc([$messageType]);
+
+        try {
+            $testCounter = $this->registryTemporary->getOrRegisterCounter(
+                $this->namespace,
+                'hermes_test_counter',
+                'Just a test',
+                ['event_type']
+            );
+        } catch (MetricsRegistrationException $e) {
+            return;
+        }
+
+        $testCounter->inc([$messageType]);
     }
 
     /**
