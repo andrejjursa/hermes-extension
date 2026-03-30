@@ -10,7 +10,7 @@ use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
 use Prometheus\RenderTextFormat;
-use Prometheus\Summary;
+use Ramsey\Uuid\Uuid;
 use Throwable;
 
 final class PrometheusMetrics
@@ -25,6 +25,10 @@ final class PrometheusMetrics
 
     protected int $processStart = 0;
 
+    protected int $pid = 0;
+
+    protected string $uuid;
+
     public function __construct(
         CollectorRegistry $registry,
         CollectorRegistry $registryTemporary,
@@ -33,6 +37,8 @@ final class PrometheusMetrics
         $this->registry = $registry;
         $this->registryTemporary = $registryTemporary;
         $this->namespace = $namespace;
+        $this->pid = getmypid() === false ? 0 : getmypid();
+        $this->uuid = Uuid::uuid7()->toString();
     }
 
     public function dataReport(): string
@@ -51,7 +57,7 @@ final class PrometheusMetrics
         $this->registry->wipeStorage();
     }
 
-    public function workerProcessStart(string $workerId, string $workerHost): void
+    public function workerProcessStart(): void
     {
         $this->processStart = hrtime(true);
 
@@ -61,10 +67,10 @@ final class PrometheusMetrics
             return;
         }
 
-        $gauge->set(0, [$workerId, $workerHost]);
+        $gauge->set(0, [$this->pid, $this->uuid]);
     }
 
-    public function workerProcessStep(string $workerId, string $workerHost): void
+    public function workerProcessStep(): void
     {
         $elapsed = floor((hrtime(true) - $this->processStart) / 1e9);
 
@@ -74,7 +80,7 @@ final class PrometheusMetrics
             return;
         }
 
-        $gauge->set($elapsed, [$workerId, $workerHost]);
+        $gauge->set($elapsed, [$this->pid, $this->uuid]);
     }
 
     public function incrementMessageCounter(string $messageType, bool $success = true): void
@@ -128,14 +134,6 @@ final class PrometheusMetrics
         }
 
         $histogram->observe($seconds, [$messageType]);
-
-        try {
-            $summary = $this->getEventDurationSummary();
-        } catch (MetricsRegistrationException $exception) {
-            return;
-        }
-
-        $summary->observe($seconds, [$messageType]);
     }
 
     /**
@@ -191,26 +189,13 @@ final class PrometheusMetrics
         );
     }
 
-    /**
-     * @throws MetricsRegistrationException
-     */
-    private function getEventDurationSummary(): Summary
-    {
-        return $this->registry->getOrRegisterSummary(
-            $this->namespace,
-            'hermes_event_duration_seconds',
-            'Event processing duration in seconds',
-            ['event_type']
-        );
-    }
-
     private function getUptimeSecondsGauge(): Gauge
     {
         return $this->registryTemporary->getOrRegisterGauge(
             $this->namespace,
             'hermes_uptime_seconds',
             'Worker uptime in seconds',
-            ['worker_id', 'worker_host']
+            ['pid', 'uuid']
         );
     }
 }

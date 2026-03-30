@@ -51,10 +51,6 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
 
     protected ?PrometheusMetrics $prometheusMetrics = null;
 
-    protected int $processPid = 0;
-
-    protected string $processHost = '';
-
     protected bool $init = false;
 
     public function __construct(RedisProxy $redis, string $key, float $refreshInterval = 1)
@@ -64,11 +60,6 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         $this->redis = $redis;
         $this->refreshInterval = $refreshInterval;
         $this->serializer = new MessageSerializer();
-        $pid = getmypid();
-        $host = getenv('HOSTNAME');
-        $host = is_string($host) ? $host : gethostname();
-        $this->processPid = is_int($pid) ? $pid : 0;
-        $this->processHost = is_string($host) ? $host : '';
     }
 
     public function setUseTopPriorityFallback(bool $useTopPriorityFallback): void
@@ -108,7 +99,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         if (!$this->init) {
             $this->init = true;
             if ($this->prometheusMetrics) {
-                $this->prometheusMetrics->workerProcessStart((string)$this->processPid, $this->processHost);
+                $this->prometheusMetrics->workerProcessStart();
             }
         }
         $this->handleSignals();
@@ -119,7 +110,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         try {
             while (true) {
                 if ($this->prometheusMetrics) {
-                    $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+                    $this->prometheusMetrics->workerProcessStep();
                 }
                 $this->checkShutdown();
                 $this->checkToBeKilled();
@@ -158,7 +149,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
                         }
                         $this->ping(HermesProcess::STATUS_PROCESSING);
                         if ($this->prometheusMetrics) {
-                            $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+                            $this->prometheusMetrics->workerProcessStep();
                         }
                         $message = $this->serializer->unserialize($messageString);
                         if ($this->prometheusMetrics) {
@@ -212,7 +203,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
             $this->removeMessageStatus();
             $accessor->clear();
             if ($this->prometheusMetrics) {
-                $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+                $this->prometheusMetrics->workerProcessStep();
             }
         }
     }
