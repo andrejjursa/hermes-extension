@@ -240,11 +240,34 @@ LUA,
     private function collectHistograms(): array
     {
         $keys = $this->redisProxy->smembers(self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX);
+        $volatileKeys = array_fill_keys(
+            $this->redisProxy->smembers(
+                self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile'
+            ),
+            true
+        );
         sort($keys);
         $histograms = [];
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
             if (!isset($raw['__meta'])) {
+                if (count($raw) === 0 && isset($volatileKeys[$key])) {
+                    $this->redisProxy->rawCommand(
+                        'EVAL',
+                        <<<LUA
+local result = redis.call('hLen', KEYS[1])
+if tonumber(result) == 0 then
+    redis.call('sRem', KEYS[2], KEYS[1])
+    redis.call('sRem', KEYS[3], KEYS[1])
+    redis.pcall('del', KEYS[1])
+end
+LUA,
+                        3,
+                        $key,
+                        self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX,
+                        self::$prefix . Histogram::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile',
+                    );
+                }
                 continue;
             }
             $histogram = json_decode($raw['__meta'], true);
