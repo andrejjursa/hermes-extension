@@ -267,7 +267,7 @@ LUA,
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
             if (!isset($raw['__meta'])) {
-                if (count($raw) === 0 && isset($volatileKeys[$key])) {
+                if (isset($volatileKeys[$key])) {
                     $this->redisProxy->rawCommand(
                         'EVAL',
                         <<<LUA
@@ -502,7 +502,7 @@ LUA,
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
             if (!isset($raw['__meta']) || count($raw) === 1) {
-                if (count($raw) === 0 && isset($volatileKeys[$key])) {
+                if (isset($volatileKeys[$key])) {
                     $this->redisProxy->rawCommand(
                         'EVAL',
                         <<<LUA
