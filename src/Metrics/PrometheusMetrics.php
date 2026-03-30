@@ -122,6 +122,19 @@ final class PrometheusMetrics
         }
 
         $histogramTest->observe(rand(0, 6), [$messageType]);
+
+        try {
+            $testGaute = $this->registryTemporary->getOrRegisterGauge(
+                $this->namespace,
+                'hermes_test_gauge',
+                'Just a test',
+                ['event_type']
+            );
+        } catch (MetricsRegistrationException $e) {
+            return;
+        }
+
+        $testGaute->inc([$messageType]);
     }
 
     /**
