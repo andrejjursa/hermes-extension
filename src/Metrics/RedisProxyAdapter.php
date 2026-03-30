@@ -19,7 +19,7 @@ use RuntimeException;
 use function count;
 use function json_encode;
 
-final class RedisProxyAdapter implements ExpiringDataAdapter
+final class RedisProxyAdapter implements Adapter
 {
     const PROMETHEUS_METRIC_KEYS_SUFFIX = '_METRIC_KEYS';
 
@@ -28,35 +28,22 @@ final class RedisProxyAdapter implements ExpiringDataAdapter
      */
     private static $prefix = 'PROMETHEUS_';
 
-    private ?int $nextTTL = null;
+    private ?int $ttl = null;
 
     /**
      * @var RedisProxy
      */
     private $redisProxy;
 
-    public function __construct(RedisProxy $redisProxy)
+    public function __construct(RedisProxy $redisProxy, ?int $ttl = null)
     {
         $this->redisProxy = $redisProxy;
+        $this->ttl = $ttl;
     }
 
     public static function setPrefix(string $prefix): void
     {
         self::$prefix = $prefix;
-    }
-
-    public function withTTL(int $ttl): ExpiringDataAdapter
-    {
-        $this->nextTTL = $ttl <= 0 ? null : $ttl;
-
-        return $this;
-    }
-
-    public function withoutTTL(): ExpiringDataAdapter
-    {
-        $this->nextTTL = null;
-
-        return $this;
     }
 
     /**
@@ -66,7 +53,6 @@ final class RedisProxyAdapter implements ExpiringDataAdapter
      */
     public function collect(): array
     {
-        $this->nextTTL = null;
         $metrics = $this->collectHistograms();
         $metrics = array_merge($metrics, $this->collectGauges());
         $metrics = array_merge($metrics, $this->collectCounters());
@@ -113,8 +99,6 @@ final class RedisProxyAdapter implements ExpiringDataAdapter
                 $data['maxAgeSeconds']
             );
         }
-
-        $this->nextTTL = null;
     }
 
     /**
@@ -158,10 +142,8 @@ LUA,
             json_encode(['b' => $bucketToIncrease, 'labelValues' => $data['labelValues']]),
             $data['value'],
             json_encode($metaData),
-            $this->nextTTL === null ? 0 : $this->nextTTL,
+            $this->ttl === null ? 0 : $this->ttl,
         );
-
-        $this->nextTTL = null;
     }
 
     /**
@@ -196,8 +178,6 @@ LUA,
             $data['value'],
             json_encode($metaData),
         );
-
-        $this->nextTTL = null;
     }
 
     /**
@@ -225,8 +205,6 @@ LUA,
             json_encode($data['labelValues']),
             json_encode($metaData),
         );
-
-        $this->nextTTL = null;
     }
 
     /**
@@ -234,8 +212,6 @@ LUA,
      */
     public function wipeStorage(): void
     {
-        $this->nextTTL = null;
-
         $searchPattern = self::$prefix . '*';
 
         $this->redisProxy->rawCommand(

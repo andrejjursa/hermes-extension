@@ -17,15 +17,19 @@ final class PrometheusMetrics
 {
     protected CollectorRegistry $registry;
 
+    protected CollectorRegistry $registryTemporary;
+
     protected string $namespace;
 
     protected int $timeStart = 0;
 
     public function __construct(
         CollectorRegistry $registry,
+        CollectorRegistry $registryTemporary,
         string $namespace
     ) {
         $this->registry = $registry;
+        $this->registryTemporary = $registryTemporary;
         $this->namespace = $namespace;
     }
 
@@ -104,6 +108,20 @@ final class PrometheusMetrics
         }
 
         $summary->observe($seconds, [$messageType]);
+
+        try {
+            $histogramTest = $this->registryTemporary->getOrRegisterHistogram(
+                $this->namespace,
+                'hermes_event_test',
+                'Just a test',
+                ['event_type'],
+                [1, 2, 3, 4, 5]
+            );
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $histogramTest->observe(rand(0, 6), [$messageType]);
     }
 
     /**
