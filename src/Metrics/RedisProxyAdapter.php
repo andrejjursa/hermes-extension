@@ -459,11 +459,35 @@ LUA,
     private function collectCounters(bool $sortMetrics = true): array
     {
         $keys = $this->redisProxy->smembers(self::$prefix . Counter::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX);
+        $volatileKeys = array_fill_keys(
+            $this->redisProxy->smembers(
+                self::$prefix . Counter::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile'
+            ),
+            true
+        );
         sort($keys);
         $counters = [];
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
-            if (!isset($raw['__meta'])) {
+            if (!isset($raw['__meta']) || count($raw) === 1) {
+                if (isset($volatileKeys[$key])) {
+                    $this->redisProxy->rawCommand(
+                        'EVAL',
+                        <<<LUA
+local result = redis.call('hLen', KEYS[1])
+local metaExists = redis.call('hExists', KEYS[1], '__meta')
+if (tonumber(result) == 1 and metaExists == 1) or tonumber(result) == 0 then
+    redis.call('sRem', KEYS[2], KEYS[1])
+    redis.call('sRem', KEYS[3], KEYS[1])
+    redis.pcall('del', KEYS[1])
+end
+LUA,
+                        3,
+                        $key,
+                        self::$prefix . Counter::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX,
+                        self::$prefix . Counter::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile',
+                    );
+                }
                 continue;
             }
             $counter = json_decode($raw['__meta'], true);
