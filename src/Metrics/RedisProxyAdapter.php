@@ -17,7 +17,11 @@ use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
 use RuntimeException;
 use function count;
+use function implode;
+use function json_decode;
 use function json_encode;
+use function strcmp;
+use function usort;
 
 final class RedisProxyAdapter implements Adapter
 {
@@ -497,7 +501,7 @@ LUA,
         $gauges = [];
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
-            if (!isset($raw['__meta'])) {
+            if (!isset($raw['__meta']) || count($raw) === 1) {
                 if (count($raw) === 0 && isset($volatileKeys[$key])) {
                     $this->redisProxy->rawCommand(
                         'EVAL',
