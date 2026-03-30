@@ -169,7 +169,7 @@ if ARGV[1] == 'hSet' then
         redis.call('sAdd', KEYS[2], KEYS[1])
     end
 else
-    if result == ARGV[3] then
+    if tonumber(result) == tonumber(ARGV[3]) then
         redis.call('hSet', KEYS[1], '__meta', ARGV[4])
         redis.call('sAdd', KEYS[2], KEYS[1])
     end
