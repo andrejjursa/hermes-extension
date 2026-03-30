@@ -23,6 +23,8 @@ final class PrometheusMetrics
 
     protected int $timeStart = 0;
 
+    protected int $processStart = 0;
+
     public function __construct(
         CollectorRegistry $registry,
         CollectorRegistry $registryTemporary,
@@ -47,6 +49,32 @@ final class PrometheusMetrics
     public function purgeData(): void
     {
         $this->registry->wipeStorage();
+    }
+
+    public function workerProcessStart(string $workerId, string $workerHost): void
+    {
+        $this->processStart = hrtime(true);
+
+        try {
+            $gauge = $this->getUptimeSecondsGauge();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $gauge->set(0, [$workerId, $workerHost]);
+    }
+
+    public function workerProcessStep(string $workerId, string $workerHost): void
+    {
+        $elapsed = floor((hrtime(true) - $this->processStart) / 1e9);
+
+        try {
+            $gauge = $this->getUptimeSecondsGauge();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $gauge->set($elapsed, [$workerId, $workerHost]);
     }
 
     public function incrementMessageCounter(string $messageType, bool $success = true): void
@@ -108,46 +136,6 @@ final class PrometheusMetrics
         }
 
         $summary->observe($seconds, [$messageType]);
-
-        try {
-            $histogramTest = $this->registryTemporary->getOrRegisterHistogram(
-                $this->namespace,
-                'hermes_event_test',
-                'Just a test',
-                ['event_type'],
-                [1, 2, 3, 4, 5]
-            );
-        } catch (MetricsRegistrationException $exception) {
-            return;
-        }
-
-        $histogramTest->observe(rand(0, 6), [$messageType]);
-
-        try {
-            $testGaute = $this->registryTemporary->getOrRegisterGauge(
-                $this->namespace,
-                'hermes_test_gauge',
-                'Just a test',
-                ['event_type']
-            );
-        } catch (MetricsRegistrationException $e) {
-            return;
-        }
-
-        $testGaute->inc([$messageType]);
-
-        try {
-            $testCounter = $this->registryTemporary->getOrRegisterCounter(
-                $this->namespace,
-                'hermes_test_counter',
-                'Just a test',
-                ['event_type']
-            );
-        } catch (MetricsRegistrationException $e) {
-            return;
-        }
-
-        $testCounter->inc([$messageType]);
     }
 
     /**
@@ -213,6 +201,16 @@ final class PrometheusMetrics
             'hermes_event_duration_seconds',
             'Event processing duration in seconds',
             ['event_type']
+        );
+    }
+
+    private function getUptimeSecondsGauge(): Gauge
+    {
+        return $this->registryTemporary->getOrRegisterGauge(
+            $this->namespace,
+            'hermes_uptime_seconds',
+            'Worker uptime in seconds',
+            ['worker_id', 'worker_host']
         );
     }
 }
