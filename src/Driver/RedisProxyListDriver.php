@@ -109,10 +109,6 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
             if ($this->prometheusMetrics) {
                 $this->prometheusMetrics->workerProcessStart((string)$this->processPid, $this->processHost);
             }
-        } else {
-            if ($this->prometheusMetrics) {
-                $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
-            }
         }
         $this->handleSignals();
         $accessor = HermesDriverAccessor::getInstance();
@@ -121,6 +117,9 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         krsort($queues);
         try {
             while (true) {
+                if ($this->prometheusMetrics) {
+                    $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+                }
                 $this->checkShutdown();
                 $this->checkToBeKilled();
                 if (!$this->shouldProcessNext()) {
@@ -211,9 +210,9 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         } finally {
             $this->removeMessageStatus();
             $accessor->clear();
-        }
-        if ($this->prometheusMetrics) {
-            $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+            if ($this->prometheusMetrics) {
+                $this->prometheusMetrics->workerProcessStep((string)$this->processPid, $this->processHost);
+            }
         }
     }
 
