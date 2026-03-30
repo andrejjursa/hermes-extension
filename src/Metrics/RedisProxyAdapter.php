@@ -508,7 +508,8 @@ LUA,
                         'EVAL',
                         <<<LUA
 local result = redis.call('hLen', KEYS[1])
-if tonumber(result) == 0 then
+local metaExists = redis.call('hExists', KEYS[1], '__meta')
+if (tonumber(result) == 1 and metaExists == 1) or tonumber(result) == 0 then
     redis.call('sRem', KEYS[2], KEYS[1])
     redis.call('sRem', KEYS[3], KEYS[1])
     redis.pcall('del', KEYS[1])
