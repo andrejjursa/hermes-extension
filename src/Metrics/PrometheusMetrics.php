@@ -75,12 +75,42 @@ final class PrometheusMetrics
         $elapsed = floor((hrtime(true) - $this->processStart) / 1e9);
 
         try {
-            $gauge = $this->getUptimeSecondsGauge();
+            $uptimeGauge = $this->getUptimeSecondsGauge();
         } catch (MetricsRegistrationException $exception) {
             return;
         }
 
-        $gauge->set($elapsed, [$this->pid, $this->uuid]);
+        $uptimeGauge->set($elapsed, [$this->pid, $this->uuid]);
+
+        try {
+            $memoryUsageGauge = $this->getMemoryUsageGauge();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $memoryUsageGauge->set(
+            memory_get_usage(),
+            [$this->pid, $this->uuid, 'real']
+        );
+        $memoryUsageGauge->set(
+            memory_get_usage(true),
+            [$this->pid, $this->uuid, 'total']
+        );
+
+        try {
+            $peakMemoryUsageGauge = $this->getPeakMemoryUsageGauge();
+        } catch (MetricsRegistrationException $exception) {
+            return;
+        }
+
+        $peakMemoryUsageGauge->set(
+            memory_get_peak_usage(),
+            [$this->pid, $this->uuid, 'real']
+        );
+        $peakMemoryUsageGauge->set(
+            memory_get_peak_usage(true),
+            [$this->pid, $this->uuid, 'total']
+        );
     }
 
     public function incrementMessageCounter(string $messageType, bool $success = true): void
@@ -196,6 +226,26 @@ final class PrometheusMetrics
             'hermes_uptime_seconds',
             'Worker uptime in seconds',
             ['pid', 'uuid']
+        );
+    }
+
+    private function getMemoryUsageGauge(): Gauge
+    {
+        return $this->registryTemporary->getOrRegisterGauge(
+            $this->namespace,
+            'hermes_memory_usage_bytes',
+            'Current memory usage in bytes',
+            ['pid', 'uuid', 'type']
+        );
+    }
+
+    private function getPeakMemoryUsageGauge(): Gauge
+    {
+        return $this->registryTemporary->getOrRegisterGauge(
+            $this->namespace,
+            'hermes_peak_memory_usage_bytes',
+            'Peak memory usage in bytes',
+            ['pid', 'uuid', 'type']
         );
     }
 }
