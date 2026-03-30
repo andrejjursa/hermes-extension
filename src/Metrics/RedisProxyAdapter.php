@@ -209,7 +209,7 @@ LUA,
 local ttl = tonumber(ARGV[5])
 local result = redis.call(ARGV[1], KEYS[1], ARGV[3], ARGV[2])
 if ttl > 0 then
-    redis.call('hExpire', KEYS[1], ttl, 'FIELDS', 1, ARGV[2])
+    redis.call('hExpire', KEYS[1], ttl, 'FIELDS', 1, ARGV[3])
     redis.call('sAdd', KEYS[3], KEYS[1])
 end
 local added = redis.call('sAdd', KEYS[2], KEYS[1])
