@@ -160,18 +160,23 @@ local ttl = tonumber(ARGV[5])
 local result = redis.call(ARGV[1], KEYS[1], ARGV[2], ARGV[3])
 if ttl > 0 then
     redis.call('hExpire', KEYS[1], ttl, 'FIELDS', 1, ARGV[2])
-    redis.call('sAdd', KEYS[3], KEYS[1])
 end
 
 if ARGV[1] == 'hSet' then
     if result == 1 then
         redis.call('hSet', KEYS[1], '__meta', ARGV[4])
         redis.call('sAdd', KEYS[2], KEYS[1])
+        if ttl > 0 then
+            redis.call('sAdd', KEYS[3], KEYS[1])
+        end
     end
 else
     if tonumber(result) == tonumber(ARGV[3]) then
         redis.call('hSet', KEYS[1], '__meta', ARGV[4])
         redis.call('sAdd', KEYS[2], KEYS[1])
+        if ttl > 0 then
+            redis.call('sAdd', KEYS[3], KEYS[1])
+        end
     end
 end
 LUA,
@@ -482,11 +487,34 @@ LUA,
     private function collectGauges(bool $sortMetrics = true): array
     {
         $keys = $this->redisProxy->smembers(self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX);
+        $volatileKeys = array_fill_keys(
+            $this->redisProxy->smembers(
+                self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile'
+            ),
+            true
+        );
         sort($keys);
         $gauges = [];
         foreach ($keys as $key) {
             $raw = $this->redisProxy->hgetall($key);
             if (!isset($raw['__meta'])) {
+                if (count($raw) === 0 && isset($volatileKeys[$key])) {
+                    $this->redisProxy->rawCommand(
+                        'EVAL',
+                        <<<LUA
+local result = redis.call('hLen', KEYS[1])
+if tonumber(result) == 0 then
+    redis.call('sRem', KEYS[2], KEYS[1])
+    redis.call('sRem', KEYS[3], KEYS[1])
+    redis.pcall('del', KEYS[1])
+end
+LUA,
+                        3,
+                        $key,
+                        self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX,
+                        self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile',
+                    );
+                }
                 continue;
             }
             $gauge = json_decode($raw['__meta'], true);
