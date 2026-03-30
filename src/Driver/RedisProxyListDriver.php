@@ -65,9 +65,10 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
         $this->refreshInterval = $refreshInterval;
         $this->serializer = new MessageSerializer();
         $pid = getmypid();
-        $host = gethostname();
-        $this->processPid = $pid !== false ? $pid : 0;
-        $this->processHost = $host !== false ? $host : '';
+        $host = getenv('HOSTNAME');
+        $host = is_string($host) ? $host : gethostname();
+        $this->processPid = is_int($pid) ? $pid : 0;
+        $this->processHost = is_string($host) ? $host : '';
     }
 
     public function setUseTopPriorityFallback(bool $useTopPriorityFallback): void
