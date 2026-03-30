@@ -156,7 +156,12 @@ LUA,
         $this->redisProxy->rawCommand(
             'EVAL',
             <<<LUA
+local ttl = tonumber(ARGV[5])
 local result = redis.call(ARGV[1], KEYS[1], ARGV[2], ARGV[3])
+if ttl > 0 then
+    redis.call('hExpire', KEYS[1], ttl, 'FIELDS', 1, ARGV[2])
+    redis.call('sAdd', KEYS[3], KEYS[1])
+end
 
 if ARGV[1] == 'hSet' then
     if result == 1 then
@@ -170,13 +175,15 @@ else
     end
 end
 LUA,
-            2,
+            3,
             $this->toMetricKey($data),
             self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX,
+            self::$prefix . Gauge::TYPE . self::PROMETHEUS_METRIC_KEYS_SUFFIX . ':volatile',
             $this->getRedisCommand($data['command']),
             json_encode($data['labelValues']),
             $data['value'],
             json_encode($metaData),
+            $this->ttl === null ? 0 : $this->ttl,
         );
     }
 
