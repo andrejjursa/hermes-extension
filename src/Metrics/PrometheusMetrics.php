@@ -10,6 +10,7 @@ use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
 use Prometheus\RenderTextFormat;
+use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Ramsey\Uuid\Uuid;
@@ -20,7 +21,7 @@ use function hrtime;
 use function memory_get_peak_usage;
 use function memory_get_usage;
 
-final class PrometheusMetrics
+final class PrometheusMetrics implements LoggerAwareInterface
 {
     protected ?LoggerInterface $logger = null;
 
