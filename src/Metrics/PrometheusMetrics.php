@@ -9,17 +9,20 @@ use Prometheus\Counter;
 use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
+use Prometheus\MetricFamilySamples;
 use Prometheus\RenderTextFormat;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Ramsey\Uuid\Uuid;
 use Throwable;
+use function array_filter;
 use function floor;
 use function getmypid;
 use function hrtime;
 use function memory_get_peak_usage;
 use function memory_get_usage;
+use function strpos;
 
 final class PrometheusMetrics implements LoggerAwareInterface
 {
@@ -56,9 +59,14 @@ final class PrometheusMetrics implements LoggerAwareInterface
         $this->logger = $logger;
     }
 
-    public function dataReport(): string
+    public function dataReport(bool $onlyFromNamespace = true): string
     {
         $samples = $this->registry->getMetricFamilySamples();
+        if ($onlyFromNamespace) {
+            $samples = array_filter($samples, function (MetricFamilySamples $sample) {
+                return strpos($sample->getName(), $this->namespace . '_') === 0;
+            });
+        }
         $rendered = new RenderTextFormat();
         try {
             return $rendered->render($samples, true);
