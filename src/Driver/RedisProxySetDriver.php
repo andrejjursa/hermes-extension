@@ -29,6 +29,7 @@ use Tomaj\Hermes\Shutdown\ShutdownException;
 use function count;
 use function in_array;
 use function intval;
+use function is_string;
 use function krsort;
 use function usleep;
 
