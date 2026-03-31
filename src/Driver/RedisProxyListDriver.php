@@ -30,8 +30,10 @@ use Tomaj\Hermes\SerializeException;
 use Tomaj\Hermes\Shutdown\ShutdownException;
 use function count;
 use function in_array;
+use function intval;
 use function is_string;
 use function krsort;
+use function usleep;
 
 final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface, MessageReliabilityInterface, ForkableDriverInterface
 {
@@ -55,7 +57,7 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
 
     protected ?PrometheusMetrics $prometheusMetrics = null;
 
-    protected bool $init = false;
+    protected bool $prometheusInit = false;
 
     public function __construct(RedisProxy $redis, string $key, float $refreshInterval = 1)
     {
@@ -100,8 +102,8 @@ final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface
      */
     public function wait(Closure $callback, array $priorities = []): void
     {
-        if (!$this->init) {
-            $this->init = true;
+        if (!$this->prometheusInit) {
+            $this->prometheusInit = true;
             if ($this->prometheusMetrics) {
                 $this->prometheusMetrics->workerProcessStart();
             }
