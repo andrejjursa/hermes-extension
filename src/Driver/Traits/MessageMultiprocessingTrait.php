@@ -8,6 +8,23 @@ use LogicException;
 use RedisProxy\RedisProxy;
 use Throwable;
 use Tomaj\Hermes\Driver\DriverInterface;
+use function debug_backtrace;
+use function extension_loaded;
+use function file_exists;
+use function file_get_contents;
+use function file_put_contents;
+use function is_a;
+use function pcntl_fork;
+use function pcntl_waitpid;
+use function posix_getpgid;
+use function posix_getppid;
+use function posix_kill;
+use function sprintf;
+use function sys_get_temp_dir;
+use function uniqid;
+use function unlink;
+use function usleep;
+use const DEBUG_BACKTRACE_IGNORE_ARGS;
 
 trait MessageMultiprocessingTrait
 {

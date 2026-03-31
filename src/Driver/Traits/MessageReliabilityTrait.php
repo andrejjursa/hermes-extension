@@ -14,6 +14,18 @@ use Tomaj\Hermes\Dispatcher;
 use Tomaj\Hermes\Driver\DriverInterface;
 use Tomaj\Hermes\Message;
 use Tomaj\Hermes\MessageInterface;
+use function gethostname;
+use function getmypid;
+use function hrtime;
+use function is_array;
+use function json_decode;
+use function json_encode;
+use function max;
+use function microtime;
+use function min;
+use function round;
+use function sprintf;
+use function usleep;
 
 trait MessageReliabilityTrait
 {

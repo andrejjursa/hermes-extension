@@ -13,6 +13,18 @@ use RuntimeException;
 use Throwable;
 use Tomaj\Hermes\Driver\SerializerAwareTrait;
 use Tracy\Debugger;
+use function count;
+use function gethostname;
+use function getmypid;
+use function is_string;
+use function json_decode;
+use function json_encode;
+use function max;
+use function microtime;
+use function min;
+use function round;
+use function sprintf;
+use function usort;
 
 /**
  * @phpstan-type Monitor array{
