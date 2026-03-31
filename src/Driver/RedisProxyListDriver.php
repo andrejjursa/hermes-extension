@@ -28,6 +28,10 @@ use Tomaj\Hermes\MessageInterface;
 use Tomaj\Hermes\MessageSerializer;
 use Tomaj\Hermes\SerializeException;
 use Tomaj\Hermes\Shutdown\ShutdownException;
+use function count;
+use function in_array;
+use function is_string;
+use function krsort;
 
 final class RedisProxyListDriver implements DriverInterface, QueueAwareInterface, MessageReliabilityInterface, ForkableDriverInterface
 {

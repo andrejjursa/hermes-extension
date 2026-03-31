@@ -10,11 +10,20 @@ use Prometheus\Exception\MetricsRegistrationException;
 use Prometheus\Gauge;
 use Prometheus\Histogram;
 use Prometheus\RenderTextFormat;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use Ramsey\Uuid\Uuid;
 use Throwable;
+use function floor;
+use function getmypid;
+use function hrtime;
+use function memory_get_peak_usage;
+use function memory_get_usage;
 
 final class PrometheusMetrics
 {
+    protected ?LoggerInterface $logger = null;
+
     protected CollectorRegistry $registry;
 
     protected CollectorRegistry $registryTemporary;
@@ -41,6 +50,11 @@ final class PrometheusMetrics
         $this->uuid = Uuid::uuid7()->toString();
     }
 
+    public function setLogger(LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
+    }
+
     public function dataReport(): string
     {
         $samples = $this->registry->getMetricFamilySamples();
@@ -48,6 +62,7 @@ final class PrometheusMetrics
         try {
             return $rendered->render($samples, true);
         } catch (Throwable $exception) {
+            $this->logException($exception);
             return '';
         }
     }
@@ -63,11 +78,13 @@ final class PrometheusMetrics
 
         try {
             $gauge = $this->getUptimeSecondsGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $gauge->set(0, [$this->pid, $this->uuid]);
+        } catch (Throwable $exception) {
+            $this->logException(
+                $exception,
+                ['pid' => $this->pid, 'uuid' => $this->uuid],
+            );
         }
-
-        $gauge->set(0, [$this->pid, $this->uuid]);
     }
 
     public function workerProcessStep(): void
@@ -76,52 +93,57 @@ final class PrometheusMetrics
 
         try {
             $uptimeGauge = $this->getUptimeSecondsGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $uptimeGauge->set($elapsed, [$this->pid, $this->uuid]);
+        } catch (Throwable $exception) {
+            $this->logException(
+                $exception,
+                ['pid' => $this->pid, 'uuid' => $this->uuid],
+            );
         }
-
-        $uptimeGauge->set($elapsed, [$this->pid, $this->uuid]);
 
         try {
             $memoryUsageGauge = $this->getMemoryUsageGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $memoryUsageGauge->set(
+                memory_get_usage(),
+                [$this->pid, $this->uuid, 'real']
+            );
+            $memoryUsageGauge->set(
+                memory_get_usage(true),
+                [$this->pid, $this->uuid, 'total']
+            );
+        } catch (Throwable $exception) {
+            $this->logException(
+                $exception,
+                ['pid' => $this->pid, 'uuid' => $this->uuid],
+            );
         }
-
-        $memoryUsageGauge->set(
-            memory_get_usage(),
-            [$this->pid, $this->uuid, 'real']
-        );
-        $memoryUsageGauge->set(
-            memory_get_usage(true),
-            [$this->pid, $this->uuid, 'total']
-        );
 
         try {
             $peakMemoryUsageGauge = $this->getPeakMemoryUsageGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $peakMemoryUsageGauge->set(
+                memory_get_peak_usage(),
+                [$this->pid, $this->uuid, 'real']
+            );
+            $peakMemoryUsageGauge->set(
+                memory_get_peak_usage(true),
+                [$this->pid, $this->uuid, 'total']
+            );
+        } catch (Throwable $exception) {
+            $this->logException(
+                $exception,
+                ['pid' => $this->pid, 'uuid' => $this->uuid],
+            );
         }
-
-        $peakMemoryUsageGauge->set(
-            memory_get_peak_usage(),
-            [$this->pid, $this->uuid, 'real']
-        );
-        $peakMemoryUsageGauge->set(
-            memory_get_peak_usage(true),
-            [$this->pid, $this->uuid, 'total']
-        );
     }
 
     public function incrementMessageCounter(string $messageType, bool $success = true): void
     {
         try {
             $counter = $this->getEventsCounter();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $counter->inc([$messageType, $success ? 'success' : 'error']);
+        } catch (Throwable $exception) {
+            $this->logException($exception);
         }
-
-        $counter->inc([$messageType, $success ? 'success' : 'error']);
     }
 
     public function startProcessingMessage(string $messageType): void
@@ -129,11 +151,10 @@ final class PrometheusMetrics
         $this->timeStart = hrtime(true);
         try {
             $gauge = $this->getEventsInProgressGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $gauge->inc([$messageType]);
+        } catch (Throwable $exception) {
+            $this->logException($exception);
         }
-
-        $gauge->inc([$messageType]);
     }
 
     public function finishProcessingMessage(string $messageType): void
@@ -143,27 +164,24 @@ final class PrometheusMetrics
         $seconds = ($end - $this->timeStart) / 1e9;
         try {
             $gauge = $this->getEventsInProgressGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $gauge->dec([$messageType]);
+        } catch (Throwable $exception) {
+            $this->logException($exception);
         }
-
-        $gauge->dec([$messageType]);
 
         try {
             $gauge = $this->getEventTimestampGauge();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $gauge->set(time(), [$messageType]);
+        } catch (Throwable $exception) {
+            $this->logException($exception);
         }
-
-        $gauge->set(time(), [$messageType]);
 
         try {
             $histogram = $this->getEventDurationHistogram();
-        } catch (MetricsRegistrationException $exception) {
-            return;
+            $histogram->observe($seconds, [$messageType]);
+        } catch (Throwable $exception) {
+            $this->logException($exception);
         }
-
-        $histogram->observe($seconds, [$messageType]);
     }
 
     /**
@@ -219,6 +237,9 @@ final class PrometheusMetrics
         );
     }
 
+    /**
+     * @throws MetricsRegistrationException
+     */
     private function getUptimeSecondsGauge(): Gauge
     {
         return $this->registryTemporary->getOrRegisterGauge(
@@ -229,6 +250,9 @@ final class PrometheusMetrics
         );
     }
 
+    /**
+     * @throws MetricsRegistrationException
+     */
     private function getMemoryUsageGauge(): Gauge
     {
         return $this->registryTemporary->getOrRegisterGauge(
@@ -239,6 +263,9 @@ final class PrometheusMetrics
         );
     }
 
+    /**
+     * @throws MetricsRegistrationException
+     */
     private function getPeakMemoryUsageGauge(): Gauge
     {
         return $this->registryTemporary->getOrRegisterGauge(
@@ -247,5 +274,26 @@ final class PrometheusMetrics
             'Peak memory usage in bytes',
             ['pid', 'uuid', 'type']
         );
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     * @param string $level {@see LogLevel}::* log level
+     */
+    protected function logException(Throwable $exception, array $context = [], string $level = LogLevel::ERROR): void
+    {
+        if ($this->logger === null) {
+            return;
+        }
+        $exceptionContext = [
+            'code' => $exception->getCode(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => $exception->getTraceAsString(),
+        ];
+        if ($context !== []) {
+            $exceptionContext['context'] = $context;
+        }
+        $this->logger->log($level, $exception->getMessage(), $exceptionContext);
     }
 }

@@ -16,11 +16,23 @@ use Prometheus\Summary;
 use RedisProxy\RedisProxy;
 use RedisProxy\RedisProxyException;
 use RuntimeException;
+use function array_fill_keys;
+use function array_keys;
+use function array_map;
+use function array_merge;
+use function array_sum;
+use function array_unique;
+use function base64_decode;
+use function base64_encode;
 use function count;
 use function implode;
 use function json_decode;
 use function json_encode;
+use function json_last_error;
+use function json_last_error_msg;
+use function sort;
 use function strcmp;
+use function uniqid;
 use function usort;
 
 final class RedisProxyAdapter implements Adapter
